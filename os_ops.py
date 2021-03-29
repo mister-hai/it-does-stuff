@@ -162,3 +162,14 @@ def step_on_through(self):
                     "[+] Success!",
                     "[-] Failed! Check the logfile!"]
                 }
+
+def swap_resume_location():
+                # add a grep from SPACE UUID= to the end of uuid
+                '':["blkid | awk -F\" '/swap/ {print $2}'
+
+                 # add swap UUID to /etc/initramfs-tools/conf.d/resume
+                 #printf "RESUME=UUID=$(blkid | awk -F\" '/swap/ {print $2}')\n" | sudo tee /etc/initramfs-tools/conf.d/resume
+                 '':["printf 'RESUME=UUID=$(blkid | awk -F\\" '/swap/ {print $2}\')\n" | sudo tee /etc/initramfs-tools/conf.d/resume',
+                 
+                #  update the kernels on the system:
+                '':["sudo update-iniramfs -u -k all
