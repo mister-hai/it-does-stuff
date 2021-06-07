@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
+#!/usr/bin/python3.9
 ################################################################################
-##                Pybash-sh : NoSQL Edition - Vintage 2021 Python 3.8         ##
+##  Pybash-sh; CaptivePortal() : No SQL Edition - Vintage 2021 Python 3.9     ##
 ################################################################################                
 #  YOU HAVE TO PROVIDE THE MODULES YOU CREATE AND THEY MUST FIT THE SPEC      ##
 #                                   
@@ -25,7 +26,6 @@
 ################################################################################
 """
 This pybashy file uses the following configuration
-
     pybashy spec:
         - 
         - no config file
@@ -40,6 +40,7 @@ import logging
 import pkgutil
 import inspect
 import traceback
+import threading
 import subprocess
 from pathlib import Path
 from importlib import import_module
@@ -87,21 +88,32 @@ is_method          = lambda func: inspect.getmembers(func, predicate=inspect.ism
 def error_printer(message):
     exc_type, exc_value, exc_tb = sys.exc_info()
     trace = traceback.TracebackException(exc_type, exc_value, exc_tb) 
-    if LOGLEVEL == 'DEV_IS_DUMB':
-        debug_message('LINE NUMBER >>>' + str(exc_tb.tb_lineno))
-        greenprint('[+]The Error That Occured Was :')
-        error_message( message + ''.join(trace.format_exception_only()))
-        try:
-            critical_message("Some info:")
-            exc_info = sys.exc_info()
-            traceback.print_exception(*exc_info)
-            makegreen(traceback.format_tb(trace.exc_traceback))
-            #makegreen(traceback.format_list(traceback.extract_tb(trace)[-1:])[-1])
-        except Exception:
-            critical_message("ERROR PRINTER FUCKED UP HERE IS WHY")
-            error_message( message + ''.join(trace.format_exception_only()))
-    else:
-        error_message(message + ''.join(trace.format_exception_only()))
+    try:
+        redprint( message + ''.join(trace.format_exception_only()))
+        #traceback.format_list(trace.extract_tb(trace)[-1:])[-1]
+        blueprint('LINE NUMBER >>>' + str(exc_tb.tb_lineno))
+    except Exception:
+        yellow_bold_print("EXCEPTION IN ERROR HANDLER!!!")
+        redprint(message + ''.join(trace.format_exception_only()))
+
+#def error_printer(message):
+#    exc_type, exc_value, exc_tb = sys.exc_info()
+#    trace = traceback.TracebackException(exc_type, exc_value, exc_tb) 
+#    if LOGLEVEL == 'DEV_IS_DUMB':
+#        debug_message('LINE NUMBER >>>' + str(exc_tb.tb_lineno))
+#        greenprint('[+]The Error That Occured Was :')
+#        error_message( message + ''.join(trace.format_exception_only()))
+#        try:
+#            critical_message("Some info:")
+#            exc_info = sys.exc_info()
+#            traceback.print_exception(*exc_info)
+#            makegreen(traceback.format_tb(trace.exc_traceback))
+#            #makegreen(traceback.format_list(traceback.extract_tb(trace)[-1:])[-1])
+#        except Exception:
+#            critical_message("ERROR PRINTER FUCKED UP HERE IS WHY")
+#            error_message( message + ''.join(trace.format_exception_only()))
+#    else:
+#        error_message(message + ''.join(trace.format_exception_only()))
 
 def list_modules():
     '''
@@ -152,7 +164,8 @@ class CommandSet():
     def __repr__(self):
         makeyellow("HI! I AM A CommandSet()!")
     
-    def add_command_dict(self, cmd_name, new_command_dict):
+    def AddCommandDict(self, cmd_name, new_command_dict):
+        '''Creates a new Command() from a step and assigns to self'''
         try:
             new_command = Command(cmd_name, new_command_dict)
             setattr(self , new_command.name, new_command)
@@ -197,7 +210,7 @@ class GenPerp_threader():
 
     def threader(self, thread_function, name):
         info_message("Thread {}: starting".format(self.function_name))
-        thread = threading.Thread(target=self.thread_function, self.function_name)
+        thread = threading.Thread(None,self.thread_function, self.function_name)
         thread.start()
         info_message("Thread {}: finishing".format(name))
 
@@ -278,6 +291,7 @@ In a variable named spiffy
     '''
     def __init__(self, exec_pool : ExecutionPool):
         ''''''
+        self.exec_pool  = exec_pool
 
     def get_stuff(self, file_import):
         '''asdf'''
@@ -296,7 +310,7 @@ In a variable named spiffy
                             if param == "steps" :
                                 for command_name in param.keys():
                                     cmd_dict = param.get(command_name)
-                                    new_function.add_command_dict(command_name,cmd_dict)
+                                    new_function.AddCommandDict(command_name,cmd_dict)
                         #add the function to the ModuleSet()
                         module_set.add_function(new_function)
             # now we assign top level steps and stuff to the ModuleSet()
@@ -304,9 +318,9 @@ In a variable named spiffy
             for command_name in steps.keys():
                 cmd_dict = param.get(command_name)
                 # add the command to the function, set command name
-                module_set.add_command_dict(command_name,cmd_dict)
+                module_set.AddCommandDict(command_name,cmd_dict)
             #add module to execution pool
-            setattr(exec_pool, module_set.__name__, module_set)
+            setattr(self.exec_pool, module_set.__name__, module_set)
         except SystemExit:
                 error_printer('[-] CRITICAL ERROR: input file didnt validate, check your syntax maybe?')
 
@@ -316,12 +330,31 @@ In a variable named spiffy
         imported_file          = import_module(command_files_name)#, package='pybashy')
         return imported_file
 
+class PybashyRunFunction():
+    ''' 
+    This is the class you should use to run one off functions, established inline,
+    deep in a complex structure that you do not wish to pick apart
+    The function should contain only a "steps" variable and format()
+    ''' 
+    def __init__(self, FunctionToRun):
+        NewFunctionSet       = FunctionSet()
+        #get name of function
+        new_function.name  = getattr(FunctionToRun, "__name__")
+        steps              = getattr(FunctionToRun, "steps")
+        #itterate over the steps to get each individual action/command
+        # added to the FunctionSet as a Command() via the 
+        for step in steps:
+            for command_name in step.keys():
+                cmd_dict = step.get(command_name)
+                #add the step to the functionset()
+                NewFunctionSet.AddCommandDict(command_name,cmd_dict)
 
 
-########################################################################
-####                    TESTING EXEC POOL NOW                       ####
-###             # NEVER FEAR, THE END IS FUCKING NEAR!#              ###
-########################################################################
+
+    ########################################################################
+    ####                    TESTING EXEC POOL NOW                       ####
+    ###             # NEVER FEAR, THE END IS FUCKING NEAR!#              ###
+    ########################################################################
 cmdstrjson = {'ls_etc' : { "command": "ls -la /etc","info_message":"[+] Info Text","success_message" : "[+] Command Sucessful", "failure_message" : "[-] ls -la Failed! Check the logfile!"},'ls_home' : { "command" : "ls -la ~/","info_message" : "[+] Info Text","success_message" : "[+] Command Sucessful","failure_message" : "[-] ls -la Failed! Check the logfile!"}}
 exec_pool          = ExecutionPool()
 module_set         = ModuleSet('test1')
@@ -329,31 +362,33 @@ function_prototype = CommandSet()
 new_function       = FunctionSet()
 runner = CommandRunner(exec_pool = exec_pool)
 #runner.get_stuff("test.py")
-try:
-    for command_name in cmdstrjson.keys():
-        cmd_dict = cmdstrjson.get(command_name)
-        critical_message('[+] Adding command_dict to FunctionSet()')
-        new_function.add_command_dict(command_name,cmd_dict)
+def run_test():
+    try:
+        for command_name in cmdstrjson.keys():
+            cmd_dict = cmdstrjson.get(command_name)
+            critical_message('[+] Adding command_dict to FunctionSet()')
+            new_function.AddCommandDict(command_name,cmd_dict)
 
-        critical_message('[+] Adding command_dict to ModuleSet()')
-        module_set.add_command_dict(command_name, cmdstrjson.get(command_name))
+            critical_message('[+] Adding command_dict to ModuleSet()')
+            module_set.AddCommandDict(command_name, cmdstrjson.get(command_name))
 
-        critical_message('[+] Adding FunctionSet() to ModuleSet()')
-        module_set.add_function(new_function)
+            critical_message('[+] Adding FunctionSet() to ModuleSet()')
+            module_set.add_function(new_function)
 
-        critical_message('[+] Adding ModuleSet() to ExecutionPool()')
-        setattr(exec_pool, module_set.__name__, module_set)
-        greenprint("=======================================")
-        critical_message('[+] TEST COMMAND : ls -la ./') 
-        # feed it JUST the command str
-        blueprint("exec_pool.exec_command(exec_pool.test1.ls_la.cmd_line)")
-        greenprint("=======================================")
-        exec_pool.exec_command(exec_pool.test.ls_la.cmd_line)
-        greenprint("=======================================")
-        critical_message('[+] TEST FUNCTION : ls -la ./')
-        #run the whole functionset()
-        blueprint("exec_pool.run_function(exec_pool.test1)")
-        greenprint("=======================================")
-        exec_pool.run_function(exec_pool.test1)
-except Exception:
-    error_printer("WAAAAGHHH!\n\n")
+            critical_message('[+] Adding ModuleSet() to ExecutionPool()')
+            setattr(exec_pool, module_set.__name__, module_set)
+            greenprint("=======================================")
+            critical_message('[+] TEST COMMAND : ls -la ./') 
+            # feed it JUST the command str
+            blueprint("exec_pool.exec_command(exec_pool.test1.ls_la.cmd_line)")
+            greenprint("=======================================")
+            #exec_pool.exec_command(exec_pool.test.ls_la.cmd_line)
+            greenprint("=======================================")
+            critical_message('[+] TEST FUNCTION : ls -la ./')
+            #run the whole functionset()
+            blueprint("exec_pool.run_function(exec_pool.test1)")
+            greenprint("=======================================")
+            #exec_pool.run_function(exec_pool.test1)
+    except Exception:
+        error_printer("WAAAAGHHH!\n\n")
+run_test()
