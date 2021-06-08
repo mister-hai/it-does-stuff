@@ -44,7 +44,12 @@ import threading
 import subprocess
 from pathlib import Path
 from importlib import import_module
-
+from sqlalchemy import create_engine
+from sqlalchemy import inspect
+from sqlalchemy.pool import StaticPool
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy_utils import database_exists
+from flask import Flask, render_template, Response, Request ,Config
 try:
     import colorama
     from colorama import init
@@ -60,7 +65,10 @@ except ImportError as derp:
 ##############                      VARS                       #################
 ################################################################################
 basic_items  = ['__name__', 'steps','success_message', 'failure_message', 'info_message']
-
+# we are going to do an inheritance connection to apply the user data to the user table
+list_of_db_tables   = ["Users", "UserData"]
+db_is_initialized   = bool
+db_is_populated     = bool
 LOGLEVEL            = 'DEV_IS_DUMB'
 LOGLEVELS           = [1,2,3,'DEV_IS_DUMB']
 log_file            = 'pybashy'
@@ -95,6 +103,37 @@ def error_printer(message):
     except Exception:
         yellow_bold_print("EXCEPTION IN ERROR HANDLER!!!")
         redprint(message + ''.join(trace.format_exception_only()))
+################################################################################
+##############                      CONFIG                     #################
+################################################################################
+TEST_DB            = 'sqlite://'
+DATABASE           = "pybashy"
+LOCAL_CACHE_FILE   = 'sqlite:///' + DATABASE + ".db"
+DATABASE_FILENAME  = DATABASE + '.db'
+
+if database_exists(LOCAL_CACHE_FILE) or os.path.exists(DATABASE_FILENAME):
+    DATABASE_EXISTS = True
+else:
+    DATABASE_EXISTS = False        
+  
+class Config(object):
+# TESTING = True
+# set in the std_imports for a global TESTING at top level scope
+    SQLALCHEMY_DATABASE_URI = LOCAL_CACHE_FILE
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+try:
+    engine = create_engine(LOCAL_CACHE_FILE , connect_args={"check_same_thread": False},poolclass=StaticPool)
+    PybashyDatabase = Flask(__name__ )
+    PybashyDatabase.config.from_object(Config)
+    PybashyDB = SQLAlchemy(PybashyDatabase)
+    PybashyDB.init_app(PybashyDatabase)
+    if TESTING == True:
+        PybashyDB.metadata.clear()
+except Exception:
+    exc_type, exc_value, exc_tb = sys.exc_info()
+    tb = traceback.TracebackException(exc_type, exc_value, exc_tb) 
+    error_message("[-] Database Initialization FAILED \n" + ''.join(tb.format_exception_only()))
 
 #def error_printer(message):
 #    exc_type, exc_value, exc_tb = sys.exc_info()
@@ -200,13 +239,14 @@ class ModuleSet(CommandSet):
         print(function_set.name)
         setattr(self, function_name, function_set)
 
-class GenPerp_threader():
+class GenPerpThreader():
     '''
     General Purpose threading implementation that accepts a generic programmatic entity
     '''
     def __init__(self,function_to_thread):
         self.thread_function = function_to_thread
         self.function_name   = getattr(self.thread_function.__name__)
+        self.threader(self.thread_function,self.function_name)
 
     def threader(self, thread_function, name):
         info_message("Thread {}: starting".format(self.function_name))
@@ -348,6 +388,31 @@ class PybashyRunFunction():
                 cmd_dict = step.get(command_name)
                 #add the step to the functionset()
                 NewFunctionSet.AddCommandDict(command_name,cmd_dict)
+
+class PybashyRunSingleJSON():
+    ''' 
+    This is the class you should use to run one off commands, established inline,
+    deep in a complex structure that you do not wish to pick apart
+    The input should contain only a single json Command() item and format()
+    {   
+        "IPTablesAcceptNAT": {
+            "command"         : "iptables -t nat -I PREROUTING 1 -s {} -j ACCEPT".format(self.remote_IP),
+            "info_message"    : "[+] Accept All Incomming On NAT",
+            "success_message" : "[+] Command Sucessful", 
+            "failure_message" : "[-] Command Failed! Check the logfile!"           
+        }
+    }
+    ''' 
+    def __init__(self, JSONCommandToRun:dict):
+        # grab the name
+        NewCommandName = JSONCommandToRun.keys[0]
+        # craft the command
+        NewCommand = Command(NewCommandName,JSONCommandToRun)
+        # init an execution pool to run commands
+        execpool   = ExecutionPool()
+        # run the command in a new thread
+        GenPerpThreader(execpool.exec_command(NewCommand))
+        # huh... I hope that really is all it takes... that seemed simple!
 
 
 
